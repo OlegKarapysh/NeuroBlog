@@ -1,7 +1,3 @@
-using Microsoft.EntityFrameworkCore;
-using NeuroBlog.Server.Models;
-using NeuroBlog.Shared;
-
 namespace NeuroBlog.Server.Data;
 
 public class AppDbContext : DbContext

@@ -1,6 +1,3 @@
-using Microsoft.AspNetCore.Mvc;
-using NeuroBlog.Shared;
-
 namespace NeuroBlog.Server.Controllers;
 
 [ApiController]
@@ -40,7 +37,4 @@ public abstract class ApiControllerBase : ControllerBase
     /// </summary>
     protected ObjectResult NotOwner() =>
         Problem(detail: "You can only modify your own content.", statusCode: StatusCodes.Status403Forbidden);
-
-    protected static bool SameUser(string owner, string actor) =>
-        string.Equals(owner, actor, StringComparison.Ordinal);
 }

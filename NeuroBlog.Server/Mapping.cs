@@ -1,6 +1,3 @@
-using NeuroBlog.Server.Models;
-using NeuroBlog.Shared;
-
 namespace NeuroBlog.Server;
 
 public static class Mapping

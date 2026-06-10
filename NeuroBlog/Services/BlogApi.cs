@@ -1,7 +1,3 @@
-using System.Net;
-using System.Net.Http.Json;
-using NeuroBlog.Shared;
-
 namespace NeuroBlog.Services;
 
 /// <summary>Typed wrapper over the backend REST API.</summary>

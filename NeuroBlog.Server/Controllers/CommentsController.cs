@@ -1,26 +1,16 @@
-using Microsoft.AspNetCore.Mvc;
-using Microsoft.EntityFrameworkCore;
-using NeuroBlog.Server.Data;
-using NeuroBlog.Server.Models;
-using NeuroBlog.Shared;
-
 namespace NeuroBlog.Server.Controllers;
 
-public class CommentsController : ApiControllerBase
+public sealed class CommentsController(AppDbContext db) : ApiControllerBase
 {
-    private readonly AppDbContext _db;
-
-    public CommentsController(AppDbContext db) => _db = db;
-
     /// <summary>All comments for an article (flat); the client builds the tree.</summary>
     [HttpGet("api/articles/{articleId:guid}/comments")]
     public async Task<ActionResult<List<CommentDto>>> GetForArticle(Guid articleId)
     {
-        var articleExists = await _db.Articles.AnyAsync(a => a.Id == articleId);
+        var articleExists = await db.Articles.AnyAsync(a => a.Id == articleId);
         if (!articleExists)
             return NotFound();
 
-        var comments = await _db.Comments
+        var comments = await db.Comments
             .Where(c => c.ArticleId == articleId)
             .OrderBy(c => c.CreatedAt)
             .ToListAsync();
@@ -34,30 +24,22 @@ public class CommentsController : ApiControllerBase
         if (CurrentUser is not { } user)
             return MissingUser();
 
-        var articleExists = await _db.Articles.AnyAsync(a => a.Id == articleId);
+        var articleExists = await db.Articles.AnyAsync(a => a.Id == articleId);
         if (!articleExists)
             return NotFound();
 
         if (request.ParentCommentId is { } parentId)
         {
             // The parent must exist and belong to the same article.
-            var parentOk = await _db.Comments.AnyAsync(c => c.Id == parentId && c.ArticleId == articleId);
+            var parentOk = await db.Comments.AnyAsync(c => c.Id == parentId && c.ArticleId == articleId);
             if (!parentOk)
                 return Problem(detail: "Parent comment not found on this article.", statusCode: StatusCodes.Status400BadRequest);
         }
 
-        var comment = new Comment
-        {
-            Id = Guid.NewGuid(),
-            ArticleId = articleId,
-            ParentCommentId = request.ParentCommentId,
-            Author = user,
-            Content = request.Content.Trim(),
-            CreatedAt = DateTimeOffset.UtcNow,
-        };
+        var comment = Comment.Create(articleId, user, request.Content, request.ParentCommentId);
 
-        _db.Comments.Add(comment);
-        await _db.SaveChangesAsync();
+        db.Comments.Add(comment);
+        await db.SaveChangesAsync();
 
         return CreatedAtAction(nameof(GetForArticle), new { articleId }, comment.ToDto());
     }
@@ -68,17 +50,16 @@ public class CommentsController : ApiControllerBase
         if (CurrentUser is not { } user)
             return MissingUser();
 
-        var comment = await _db.Comments.FirstOrDefaultAsync(c => c.Id == id);
+        var comment = await db.Comments.FirstOrDefaultAsync(c => c.Id == id);
         if (comment is null)
             return NotFound();
+        if (!comment.IsAuthoredBy(user))
+            return NotOwner();
         if (comment.IsDeleted)
             return Problem(detail: "A deleted comment cannot be edited.", statusCode: StatusCodes.Status400BadRequest);
-        if (!SameUser(comment.Author, user))
-            return NotOwner();
 
-        comment.Content = request.Content.Trim();
-        comment.UpdatedAt = DateTimeOffset.UtcNow;
-        await _db.SaveChangesAsync();
+        comment.Edit(request.Content);
+        await db.SaveChangesAsync();
 
         return Ok(comment.ToDto());
     }
@@ -90,19 +71,14 @@ public class CommentsController : ApiControllerBase
         if (CurrentUser is not { } user)
             return MissingUser();
 
-        var comment = await _db.Comments.FirstOrDefaultAsync(c => c.Id == id);
+        var comment = await db.Comments.FirstOrDefaultAsync(c => c.Id == id);
         if (comment is null)
             return NotFound();
-        if (!SameUser(comment.Author, user))
+        if (!comment.IsAuthoredBy(user))
             return NotOwner();
 
-        if (!comment.IsDeleted)
-        {
-            comment.IsDeleted = true;
-            comment.Content = "";
-            comment.UpdatedAt = DateTimeOffset.UtcNow;
-            await _db.SaveChangesAsync();
-        }
+        comment.Delete();
+        await db.SaveChangesAsync();
 
         return Ok(comment.ToDto());
     }

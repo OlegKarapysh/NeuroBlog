@@ -1,28 +1,12 @@
-using Microsoft.AspNetCore.Mvc;
-using Microsoft.EntityFrameworkCore;
-using NeuroBlog.Server.Data;
-using NeuroBlog.Server.Models;
-using NeuroBlog.Server.Services;
-using NeuroBlog.Shared;
-
 namespace NeuroBlog.Server.Controllers;
 
 [Route("api/articles")]
-public class ArticlesController : ApiControllerBase
+public sealed class ArticlesController(AppDbContext db, HtmlSanitizer sanitizer) : ApiControllerBase
 {
-    private readonly AppDbContext _db;
-    private readonly IArticleHtmlSanitizer _sanitizer;
-
-    public ArticlesController(AppDbContext db, IArticleHtmlSanitizer sanitizer)
-    {
-        _db = db;
-        _sanitizer = sanitizer;
-    }
-
     [HttpGet]
     public async Task<ActionResult<List<ArticleSummaryDto>>> GetAll()
     {
-        var rows = await _db.Articles
+        var rows = await db.Articles
             .OrderByDescending(a => a.CreatedAt)
             .Select(a => new
             {
@@ -41,7 +25,7 @@ public class ArticlesController : ApiControllerBase
             Id = a.Id,
             Title = a.Title,
             Author = a.Author,
-            Excerpt = _sanitizer.ToExcerpt(a.Html),
+            Excerpt = sanitizer.Sanitize(a.Html),
             CommentCount = a.CommentCount,
             CreatedAt = a.CreatedAt,
             UpdatedAt = a.UpdatedAt,
@@ -53,7 +37,7 @@ public class ArticlesController : ApiControllerBase
     [HttpGet("{id:guid}")]
     public async Task<ActionResult<ArticleDto>> GetById(Guid id)
     {
-        var article = await _db.Articles
+        var article = await db.Articles
             .Where(a => a.Id == id)
             .Select(a => new { Article = a, CommentCount = a.Comments.Count })
             .FirstOrDefaultAsync();
@@ -70,21 +54,14 @@ public class ArticlesController : ApiControllerBase
         if (CurrentUser is not { } user)
             return MissingUser();
 
-        var html = _sanitizer.Sanitize(request.Html);
+        var html = sanitizer.Sanitize(request.Html);
         if (string.IsNullOrWhiteSpace(html))
             return Problem(detail: "The article body is empty after sanitization.", statusCode: StatusCodes.Status400BadRequest);
 
-        var article = new Article
-        {
-            Id = Guid.NewGuid(),
-            Title = NormalizeTitle(request.Title),
-            Html = html,
-            Author = user,
-            CreatedAt = DateTimeOffset.UtcNow,
-        };
+        var article = Article.Create(request.Title, html, user);
 
-        _db.Articles.Add(article);
-        await _db.SaveChangesAsync();
+        db.Articles.Add(article);
+        await db.SaveChangesAsync();
 
         return CreatedAtAction(nameof(GetById), new { id = article.Id }, article.ToDto(0));
     }
@@ -95,23 +72,20 @@ public class ArticlesController : ApiControllerBase
         if (CurrentUser is not { } user)
             return MissingUser();
 
-        var article = await _db.Articles.FirstOrDefaultAsync(a => a.Id == id);
+        var article = await db.Articles.FirstOrDefaultAsync(a => a.Id == id);
         if (article is null)
             return NotFound();
-        if (!SameUser(article.Author, user))
+        if (!article.IsAuthoredBy(user))
             return NotOwner();
 
-        var html = _sanitizer.Sanitize(request.Html);
+        var html = sanitizer.Sanitize(request.Html);
         if (string.IsNullOrWhiteSpace(html))
             return Problem(detail: "The article body is empty after sanitization.", statusCode: StatusCodes.Status400BadRequest);
 
-        article.Title = NormalizeTitle(request.Title);
-        article.Html = html;
-        article.UpdatedAt = DateTimeOffset.UtcNow;
+        article.Update(request.Title, html);
+        await db.SaveChangesAsync();
 
-        await _db.SaveChangesAsync();
-
-        var commentCount = await _db.Comments.CountAsync(c => c.ArticleId == id);
+        var commentCount = await db.Comments.CountAsync(c => c.ArticleId == id);
         return Ok(article.ToDto(commentCount));
     }
 
@@ -121,21 +95,15 @@ public class ArticlesController : ApiControllerBase
         if (CurrentUser is not { } user)
             return MissingUser();
 
-        var article = await _db.Articles.FirstOrDefaultAsync(a => a.Id == id);
+        var article = await db.Articles.FirstOrDefaultAsync(a => a.Id == id);
         if (article is null)
             return NotFound();
-        if (!SameUser(article.Author, user))
+        if (!article.IsAuthoredBy(user))
             return NotOwner();
 
-        _db.Articles.Remove(article);
-        await _db.SaveChangesAsync();
+        db.Articles.Remove(article);
+        await db.SaveChangesAsync();
 
         return NoContent();
-    }
-
-    private static string NormalizeTitle(string? title)
-    {
-        title = title?.Trim();
-        return string.IsNullOrEmpty(title) ? "Untitled" : title;
     }
 }

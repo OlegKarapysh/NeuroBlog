@@ -1,13 +1,16 @@
-using Microsoft.EntityFrameworkCore;
-using NeuroBlog.Server.Data;
-using NeuroBlog.Server.Services;
-
 var builder = WebApplication.CreateBuilder(args);
 
 builder.Services.AddControllers();
 builder.Services.AddDbContext<AppDbContext>(options =>
     options.UseNpgsql(builder.Configuration.GetConnectionString("Default")));
-builder.Services.AddSingleton<IArticleHtmlSanitizer, ArticleHtmlSanitizer>();
+builder.Services.AddSingleton<HtmlSanitizer>();
+
+// Allow-everything CORS (no credentials, so AllowAnyOrigin is permitted).
+builder.Services.AddCors(options =>
+    options.AddDefaultPolicy(policy =>
+        policy.AllowAnyOrigin()
+              .AllowAnyHeader()
+              .AllowAnyMethod()));
 
 var app = builder.Build();
 
@@ -23,6 +26,7 @@ app.UseBlazorFrameworkFiles();
 app.UseStaticFiles();
 
 app.UseRouting();
+app.UseCors();
 app.MapControllers();
 
 // Any non-API, non-file request falls through to the SPA entry point.

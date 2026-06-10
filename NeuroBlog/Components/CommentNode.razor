@@ -5,7 +5,7 @@
     <div class="comment-head">
         <strong class="comment-author">@(Comment.IsDeleted ? "—" : Comment.Author)</strong>
         <span class="comment-time">@Comment.CreatedAt.ToLocalTime().ToString("MMM d, yyyy h:mm tt")</span>
-        @if (!Comment.IsDeleted && Comment.UpdatedAt is not null)
+        @if (Comment is { IsDeleted: false, UpdatedAt: not null })
         {
             <span class="comment-edited">(edited)</span>
         }
