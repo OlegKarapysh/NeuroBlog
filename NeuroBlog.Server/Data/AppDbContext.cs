@@ -1,9 +1,7 @@
 namespace NeuroBlog.Server.Data;
 
-public class AppDbContext : DbContext
+public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(options)
 {
-    public AppDbContext(DbContextOptions<AppDbContext> options) : base(options) { }
-
     public DbSet<Article> Articles => Set<Article>();
     public DbSet<Comment> Comments => Set<Comment>();
 
@@ -28,8 +26,15 @@ public class AppDbContext : DbContext
             comment.HasKey(c => c.Id);
             comment.Property(c => c.Author).HasMaxLength(ContentLimits.MaxUsernameLength).IsRequired();
             comment.Property(c => c.Content).HasMaxLength(ContentLimits.MaxCommentLength);
-            comment.HasIndex(c => c.ArticleId);
-            comment.HasIndex(c => c.ParentCommentId);
+
+            // Paging top-level comments of an article: WHERE ArticleId = @a AND
+            // ParentCommentId IS NULL ORDER BY CreatedAt, Id. Composite covers the
+            // filter + sort so the page is read straight from the index.
+            comment.HasIndex(c => new { c.ArticleId, c.ParentCommentId, c.CreatedAt, c.Id });
+
+            // Paging direct replies of a comment: WHERE ParentCommentId = @p
+            // ORDER BY CreatedAt, Id. Also serves the self-referencing FK lookups.
+            comment.HasIndex(c => new { c.ParentCommentId, c.CreatedAt, c.Id });
 
             comment.HasOne(c => c.ParentComment)
                    .WithMany(c => c.Replies)

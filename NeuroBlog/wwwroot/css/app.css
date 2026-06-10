@@ -443,3 +443,11 @@ body {
     padding: 0.2rem 0.6rem;
     font-size: 0.8rem;
 }
+
+.show-more {
+    margin-top: 1rem;
+}
+
+.replies-controls {
+    margin-top: 0.5rem;
+}

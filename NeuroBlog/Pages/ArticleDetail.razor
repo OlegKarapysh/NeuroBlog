@@ -61,7 +61,7 @@ else
 
         @if (_showComments)
         {
-            <CommentSection ArticleId="Id" OnCountChanged="OnCommentCountChanged" />
+            <CommentSection ArticleId="Id" />
         }
     </section>
 }
@@ -92,8 +92,6 @@ else
     }
 
     private void ToggleComments() => _showComments = !_showComments;
-
-    private void OnCommentCountChanged(int count) => _commentCount = count;
 
     private async Task DeleteArticle()
     {

@@ -96,7 +96,8 @@ automatically).
 | POST   | `/api/articles`                         | Create an article                    |
 | PUT    | `/api/articles/{id}`                    | Edit your article                    |
 | DELETE | `/api/articles/{id}`                    | Delete your article (cascades comments) |
-| GET    | `/api/articles/{id}/comments`           | All comments for an article (flat)   |
+| GET    | `/api/articles/{id}/comments?page=N`    | One page (10) of top-level comments, newest first |
+| GET    | `/api/comments/{id}/replies?page=N`     | One page (10) of a comment's direct replies |
 | POST   | `/api/articles/{id}/comments`           | Add a comment / reply                |
 | PUT    | `/api/comments/{id}`                    | Edit your comment                    |
 | DELETE | `/api/comments/{id}`                    | Soft-delete your comment             |

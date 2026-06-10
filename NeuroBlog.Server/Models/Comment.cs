@@ -1,34 +1,20 @@
 namespace NeuroBlog.Server.Models;
 
-/// <summary>
-/// A comment in an unlimited-depth thread. Mutating operations are methods so the
-/// invariants (e.g. a deleted comment cannot be edited) live with the data.
-/// </summary>
 public class Comment
 {
-    // Parameterless constructor for EF Core materialization only.
-    private Comment() { }
-
     public Guid Id { get; private set; }
-
     public Guid ArticleId { get; private set; }
     public Article Article { get; private set; } = null!;
-
-    /// <summary>Parent comment for replies; null for a top-level comment.</summary>
     public Guid? ParentCommentId { get; private set; }
     public Comment? ParentComment { get; private set; }
-    public List<Comment> Replies { get; private set; } = new();
-
-    public string Author { get; private set; } = "";
-
-    /// <summary>Plain text. Cleared to empty string when soft-deleted.</summary>
-    public string Content { get; private set; } = "";
-
-    /// <summary>When true the comment is shown as "This comment was deleted".</summary>
+    public List<Comment> Replies { get; private set; } = [];
+    public string Author { get; private set; } = string.Empty;
+    public string Content { get; private set; } = string.Empty;
     public bool IsDeleted { get; private set; }
-
     public DateTimeOffset CreatedAt { get; private set; }
     public DateTimeOffset? UpdatedAt { get; private set; }
+    
+    private Comment() { } // Parameterless constructor for EF Core materialization only.
 
     public static Comment Create(Guid articleId, string author, string content, Guid? parentCommentId) => new()
     {
@@ -40,7 +26,6 @@ public class Comment
         CreatedAt = DateTimeOffset.UtcNow,
     };
 
-    /// <summary>Edits the text. Not allowed once the comment has been deleted.</summary>
     public void Edit(string content)
     {
         if (IsDeleted)
@@ -50,17 +35,15 @@ public class Comment
         UpdatedAt = DateTimeOffset.UtcNow;
     }
 
-    /// <summary>Soft-deletes: keeps the row (and its replies) but clears the text. Idempotent.</summary>
-    public void Delete()
+    public void SoftDelete()
     {
         if (IsDeleted)
             return;
 
         IsDeleted = true;
-        Content = "";
+        Content = string.Empty;
         UpdatedAt = DateTimeOffset.UtcNow;
     }
 
-    public bool IsAuthoredBy(string username) =>
-        string.Equals(Author, username, StringComparison.Ordinal);
+    public bool IsAuthoredBy(string username) => string.Equals(Author, username, StringComparison.Ordinal);
 }

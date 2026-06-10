@@ -40,8 +40,13 @@ public class BlogApi
 
     // ---- Comments -------------------------------------------------------
 
-    public async Task<List<CommentDto>> GetCommentsAsync(Guid articleId) =>
-        await _http.GetFromJsonAsync<List<CommentDto>>($"api/articles/{articleId}/comments") ?? new();
+    /// <summary>One page of top-level comments (replies excluded).</summary>
+    public async Task<PagedResult<CommentDto>> GetCommentsAsync(Guid articleId, int page) =>
+        await _http.GetFromJsonAsync<PagedResult<CommentDto>>($"api/articles/{articleId}/comments?page={page}") ?? new();
+
+    /// <summary>One page of the direct replies of a comment.</summary>
+    public async Task<PagedResult<CommentDto>> GetRepliesAsync(Guid commentId, int page) =>
+        await _http.GetFromJsonAsync<PagedResult<CommentDto>>($"api/comments/{commentId}/replies?page={page}") ?? new();
 
     public async Task<CommentDto> AddCommentAsync(Guid articleId, CreateCommentRequest request)
     {

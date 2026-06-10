@@ -1,7 +1,7 @@
 @inject BlogApi Api
 
 <div class="comments">
-    <h3>Comments (@_comments.Count)</h3>
+    <h3>Comments</h3>
 
     <div class="new-comment">
         <textarea class="comment-input"
@@ -20,7 +20,7 @@
         }
     </div>
 
-    @if (_loading)
+    @if (_loading && _comments.Count == 0)
     {
         <p class="muted">Loading comments…</p>
     }
@@ -31,35 +31,57 @@
     else
     {
         <div class="comment-tree">
-            @foreach (var root in _lookup[null])
+            @foreach (var comment in _comments)
             {
-                <CommentNode Comment="root" Lookup="_lookup" ArticleId="ArticleId" OnChanged="ReloadAsync" />
+                <CommentNode @key="comment.Id" Comment="comment" ArticleId="ArticleId" />
             }
         </div>
+    }
+
+    @if (_hasMore)
+    {
+        <button class="btn btn-secondary btn-sm show-more" @onclick="LoadMore" disabled="@_loading">
+            @(_loading ? "Loading…" : "Show more comments")
+        </button>
     }
 </div>
 
 @code {
     [Parameter] public Guid ArticleId { get; set; }
-    [Parameter] public EventCallback<int> OnCountChanged { get; set; }
 
-    private List<CommentDto> _comments = new();
-    private ILookup<Guid?, CommentDto> _lookup = Enumerable.Empty<CommentDto>().ToLookup(c => (Guid?)null);
-    private string _newComment = "";
-    private bool _loading = true;
+    private readonly List<CommentDto> _comments = new();
+    private int _page;
+    private bool _hasMore;
+    private bool _loading;
     private bool _posting;
+    private string _newComment = "";
     private string? _error;
 
-    protected override async Task OnInitializedAsync() => await ReloadAsync();
+    // Loads the first page when the section is opened ("Show comments").
+    protected override Task OnInitializedAsync() => LoadFirstPageAsync();
 
-    private async Task ReloadAsync()
+    private async Task LoadFirstPageAsync()
+    {
+        _comments.Clear();
+        _page = 0;
+        _hasMore = false;
+        await LoadMore();
+    }
+
+    // Appends the next page ("Show more comments").
+    private async Task LoadMore()
     {
         _loading = true;
         try
         {
-            _comments = await Api.GetCommentsAsync(ArticleId);
-            _lookup = _comments.ToLookup(c => c.ParentCommentId);
-            await OnCountChanged.InvokeAsync(_comments.Count);
+            var result = await Api.GetCommentsAsync(ArticleId, _page + 1);
+            _comments.AddRange(result.Items);
+            _page = result.Page;
+            _hasMore = result.HasMore;
+        }
+        catch (Exception ex)
+        {
+            _error = ex.Message;
         }
         finally
         {
@@ -82,7 +104,8 @@
         {
             await Api.AddCommentAsync(ArticleId, new CreateCommentRequest { Content = content });
             _newComment = "";
-            await ReloadAsync();
+            // Reload from the first page so the new (newest) comment is visible.
+            await LoadFirstPageAsync();
         }
         catch (Exception ex)
         {

@@ -1,17 +1,17 @@
 @inject BlogApi Api
 @inject UserState User
 
-<div class="comment @(Comment.IsDeleted ? "comment-deleted" : null)">
+<div class="comment @(_comment.IsDeleted ? "comment-deleted" : null)">
     <div class="comment-head">
-        <strong class="comment-author">@(Comment.IsDeleted ? "—" : Comment.Author)</strong>
-        <span class="comment-time">@Comment.CreatedAt.ToLocalTime().ToString("MMM d, yyyy h:mm tt")</span>
-        @if (Comment is { IsDeleted: false, UpdatedAt: not null })
+        <strong class="comment-author">@(_comment.IsDeleted ? "—" : _comment.Author)</strong>
+        <span class="comment-time">@_comment.CreatedAt.ToLocalTime().ToString("MMM d, yyyy h:mm tt")</span>
+        @if (_comment is { IsDeleted: false, UpdatedAt: not null })
         {
             <span class="comment-edited">(edited)</span>
         }
     </div>
 
-    @if (Comment.IsDeleted)
+    @if (_comment.IsDeleted)
     {
         <div class="comment-body deleted-text">This comment was deleted</div>
     }
@@ -32,7 +32,7 @@
     }
     else
     {
-        <div class="comment-body">@Comment.Content</div>
+        <div class="comment-body">@_comment.Content</div>
     }
 
     @if (_error is not null)
@@ -44,7 +44,7 @@
     {
         <div class="comment-actions">
             <button class="link-btn" @onclick="ToggleReply">Reply</button>
-            @if (!Comment.IsDeleted && User.Owns(Comment.Author))
+            @if (!_comment.IsDeleted && User.Owns(_comment.Author))
             {
                 <button class="link-btn" @onclick="StartEdit">Edit</button>
                 @if (!_confirmingDelete)
@@ -82,25 +82,45 @@
         </div>
     }
 
-    @{
-        var children = Lookup[Comment.Id].ToList();
-    }
-    @if (children.Count > 0)
+    @if (_replies.Count > 0)
     {
         <div class="replies">
-            @foreach (var child in children)
+            @foreach (var reply in _replies)
             {
-                <CommentNode Comment="child" Lookup="Lookup" ArticleId="ArticleId" OnChanged="OnChanged" />
+                <CommentNode @key="reply.Id" Comment="reply" ArticleId="ArticleId" />
             }
         </div>
     }
+
+    <div class="replies-controls">
+        @if (!_repliesLoaded && _comment.ReplyCount > 0)
+        {
+            <button class="link-btn" @onclick="LoadReplies" disabled="@_loadingReplies">
+                @(_loadingReplies ? "Loading…" : $"Show replies ({_comment.ReplyCount})")
+            </button>
+        }
+        else if (_repliesHasMore)
+        {
+            <button class="link-btn" @onclick="LoadReplies" disabled="@_loadingReplies">
+                @(_loadingReplies ? "Loading…" : "Show more replies")
+            </button>
+        }
+    </div>
 </div>
 
 @code {
     [Parameter] public CommentDto Comment { get; set; } = default!;
-    [Parameter] public ILookup<Guid?, CommentDto> Lookup { get; set; } = default!;
     [Parameter] public Guid ArticleId { get; set; }
-    [Parameter] public EventCallback OnChanged { get; set; }
+
+    // Authoritative local copy so the node's own edits/deletes/replies survive
+    // re-renders triggered by the parent (which keeps loading more pages above us).
+    private CommentDto _comment = default!;
+
+    private readonly List<CommentDto> _replies = new();
+    private int _repliesPage;
+    private bool _repliesLoaded;
+    private bool _repliesHasMore;
+    private bool _loadingReplies;
 
     private bool _replying;
     private bool _editing;
@@ -109,6 +129,36 @@
     private string _replyText = "";
     private string _editText = "";
     private string? _error;
+
+    protected override void OnParametersSet()
+    {
+        // Re-sync only when this slot is (re)assigned to a different comment;
+        // never clobber our own in-place edits with the original parameter.
+        if (_comment is null || _comment.Id != Comment.Id)
+            _comment = Comment;
+    }
+
+    // "Show replies" (first page) and "Show more replies" (next page) both append.
+    private async Task LoadReplies()
+    {
+        _loadingReplies = true;
+        try
+        {
+            var result = await Api.GetRepliesAsync(_comment.Id, _repliesPage + 1);
+            _replies.AddRange(result.Items);
+            _repliesPage = result.Page;
+            _repliesHasMore = result.HasMore;
+            _repliesLoaded = true;
+        }
+        catch (Exception ex)
+        {
+            _error = ex.Message;
+        }
+        finally
+        {
+            _loadingReplies = false;
+        }
+    }
 
     private void ToggleReply()
     {
@@ -120,7 +170,7 @@
     private void StartEdit()
     {
         _editing = true;
-        _editText = Comment.Content;
+        _editText = _comment.Content;
         _error = null;
     }
 
@@ -146,11 +196,17 @@
             await Api.AddCommentAsync(ArticleId, new CreateCommentRequest
             {
                 Content = content,
-                ParentCommentId = Comment.Id,
+                ParentCommentId = _comment.Id,
             });
             _replying = false;
             _replyText = "";
-            await OnChanged.InvokeAsync();
+            _comment = _comment with { ReplyCount = _comment.ReplyCount + 1 };
+            // Reload replies from the first page so the new (newest) reply shows.
+            _replies.Clear();
+            _repliesPage = 0;
+            _repliesLoaded = false;
+            _repliesHasMore = false;
+            await LoadReplies();
         }
         catch (Exception ex)
         {
@@ -175,9 +231,9 @@
         _busy = true;
         try
         {
-            await Api.UpdateCommentAsync(Comment.Id, new UpdateCommentRequest { Content = content });
+            var updated = await Api.UpdateCommentAsync(_comment.Id, new UpdateCommentRequest { Content = content });
+            _comment = updated with { ReplyCount = _comment.ReplyCount };
             _editing = false;
-            await OnChanged.InvokeAsync();
         }
         catch (Exception ex)
         {
@@ -195,9 +251,9 @@
         _error = null;
         try
         {
-            await Api.DeleteCommentAsync(Comment.Id);
+            var deleted = await Api.DeleteCommentAsync(_comment.Id);
+            _comment = deleted with { ReplyCount = _comment.ReplyCount };
             _confirmingDelete = false;
-            await OnChanged.InvokeAsync();
         }
         catch (Exception ex)
         {

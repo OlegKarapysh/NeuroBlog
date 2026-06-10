@@ -2,20 +2,30 @@ namespace NeuroBlog.Server.Controllers;
 
 public sealed class CommentsController(AppDbContext db) : ApiControllerBase
 {
-    /// <summary>All comments for an article (flat); the client builds the tree.</summary>
     [HttpGet("api/articles/{articleId:guid}/comments")]
-    public async Task<ActionResult<List<CommentDto>>> GetForArticle(Guid articleId)
+    public async Task<ActionResult<PagedResult<CommentDto>>> GetTopLevel(
+        Guid articleId, int page = 1, int pageSize = ContentLimits.DefaultCommentPageSize)
     {
-        var articleExists = await db.Articles.AnyAsync(a => a.Id == articleId);
-        if (!articleExists)
+        if (!await db.Articles.AnyAsync(a => a.Id == articleId))
+            return NotFound();
+        
+        var pageResult = await GetPage(
+            query: db.Comments.Where(c => c.ArticleId == articleId && c.ParentCommentId == null), page, pageSize);
+        
+        return Ok(pageResult);
+    }
+
+    [HttpGet("api/comments/{commentId:guid}/replies")]
+    public async Task<ActionResult<PagedResult<CommentDto>>> GetReplies(
+        Guid commentId, int page = 1, int pageSize = ContentLimits.DefaultCommentPageSize)
+    {
+        if (!await db.Comments.AnyAsync(c => c.Id == commentId))
             return NotFound();
 
-        var comments = await db.Comments
-            .Where(c => c.ArticleId == articleId)
-            .OrderBy(c => c.CreatedAt)
-            .ToListAsync();
-
-        return Ok(comments.Select(c => c.ToDto()).ToList());
+        var pageResult = await GetPage(
+            query: db.Comments.Where(c => c.ParentCommentId == commentId), page, pageSize);
+        
+        return Ok(pageResult);
     }
 
     [HttpPost("api/articles/{articleId:guid}/comments")]
@@ -24,15 +34,15 @@ public sealed class CommentsController(AppDbContext db) : ApiControllerBase
         if (CurrentUser is not { } user)
             return MissingUser();
 
-        var articleExists = await db.Articles.AnyAsync(a => a.Id == articleId);
-        if (!articleExists)
+        if (!await db.Articles.AnyAsync(a => a.Id == articleId))
             return NotFound();
 
         if (request.ParentCommentId is { } parentId)
         {
-            // The parent must exist and belong to the same article.
-            var parentOk = await db.Comments.AnyAsync(c => c.Id == parentId && c.ArticleId == articleId);
-            if (!parentOk)
+            var parentBelongsToSameArticle =
+                await db.Comments.AnyAsync(c => c.Id == parentId && c.ArticleId == articleId);
+            
+            if (!parentBelongsToSameArticle)
                 return Problem(detail: "Parent comment not found on this article.", statusCode: StatusCodes.Status400BadRequest);
         }
 
@@ -41,7 +51,7 @@ public sealed class CommentsController(AppDbContext db) : ApiControllerBase
         db.Comments.Add(comment);
         await db.SaveChangesAsync();
 
-        return CreatedAtAction(nameof(GetForArticle), new { articleId }, comment.ToDto());
+        return CreatedAtAction(nameof(GetTopLevel), new { articleId }, comment.ToDto());
     }
 
     [HttpPut("api/comments/{id:guid}")]
@@ -53,8 +63,10 @@ public sealed class CommentsController(AppDbContext db) : ApiControllerBase
         var comment = await db.Comments.FirstOrDefaultAsync(c => c.Id == id);
         if (comment is null)
             return NotFound();
+        
         if (!comment.IsAuthoredBy(user))
             return NotOwner();
+        
         if (comment.IsDeleted)
             return Problem(detail: "A deleted comment cannot be edited.", statusCode: StatusCodes.Status400BadRequest);
 
@@ -64,7 +76,6 @@ public sealed class CommentsController(AppDbContext db) : ApiControllerBase
         return Ok(comment.ToDto());
     }
 
-    /// <summary>Soft-deletes a comment so its replies remain visible.</summary>
     [HttpDelete("api/comments/{id:guid}")]
     public async Task<ActionResult<CommentDto>> Delete(Guid id)
     {
@@ -74,12 +85,56 @@ public sealed class CommentsController(AppDbContext db) : ApiControllerBase
         var comment = await db.Comments.FirstOrDefaultAsync(c => c.Id == id);
         if (comment is null)
             return NotFound();
+        
         if (!comment.IsAuthoredBy(user))
             return NotOwner();
 
-        comment.Delete();
+        var hasChildComments = await db.Comments.AnyAsync(c => c.ParentCommentId == id);
+        if (hasChildComments)
+        {
+            comment.SoftDelete();
+        }
+        else
+        {
+            db.Remove(comment);
+        }
+        
         await db.SaveChangesAsync();
 
         return Ok(comment.ToDto());
+    }
+
+    private static async Task<PagedResult<CommentDto>> GetPage(IQueryable<Comment> query, int page, int pageSize)
+    {
+        var rows = await query
+            .OrderByDescending(c => c.CreatedAt)
+            .ThenByDescending(c => c.Id)
+            .Skip((page - 1) * pageSize)
+            .Take(pageSize + 1)
+            .Select(c => new CommentDto
+            {
+                Id = c.Id,
+                ArticleId = c.ArticleId,
+                ParentCommentId = c.ParentCommentId,
+                Author = c.Author,
+                Content = c.IsDeleted ? "" : c.Content,
+                IsDeleted = c.IsDeleted,
+                CreatedAt = c.CreatedAt,
+                UpdatedAt = c.UpdatedAt,
+                ReplyCount = c.Replies.Count,
+            })
+            .ToListAsync();
+
+        var hasMore = rows.Count > pageSize;
+        if (hasMore)
+            rows.RemoveAt(rows.Count - 1);
+
+        return new PagedResult<CommentDto>
+        {
+            Items = rows,
+            Page = page,
+            PageSize = pageSize,
+            HasMore = hasMore
+        };
     }
 }

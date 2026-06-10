@@ -75,6 +75,7 @@ public sealed class ArticlesController(AppDbContext db, HtmlSanitizer sanitizer)
         var article = await db.Articles.FirstOrDefaultAsync(a => a.Id == id);
         if (article is null)
             return NotFound();
+        
         if (!article.IsAuthoredBy(user))
             return NotOwner();
 
@@ -98,6 +99,7 @@ public sealed class ArticlesController(AppDbContext db, HtmlSanitizer sanitizer)
         var article = await db.Articles.FirstOrDefaultAsync(a => a.Id == id);
         if (article is null)
             return NotFound();
+        
         if (!article.IsAuthoredBy(user))
             return NotOwner();
 

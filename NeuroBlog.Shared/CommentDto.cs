@@ -18,4 +18,7 @@ public record CommentDto
     public bool IsDeleted { get; init; }
     public DateTimeOffset CreatedAt { get; init; }
     public DateTimeOffset? UpdatedAt { get; init; }
+
+    /// <summary>Number of direct (one level) replies, used to show the "Show replies" button.</summary>
+    public int ReplyCount { get; init; }
 }
