@@ -1,0 +1,72 @@
+@page "/"
+@inject BlogApi Api
+@inject NavigationManager Nav
+
+<PageTitle>NeuroBlog</PageTitle>
+
+<div class="page-head">
+    <h1>Articles</h1>
+    <button class="btn btn-primary" @onclick="@(() => Nav.NavigateTo("articles/new"))">Write an article</button>
+</div>
+
+@if (_loading)
+{
+    <p class="muted">Loading articles…</p>
+}
+else if (_error is not null)
+{
+    <div class="alert">@_error</div>
+}
+else if (_articles.Count == 0)
+{
+    <div class="empty">
+        <p>No articles yet.</p>
+        <p class="muted">Be the first to write one!</p>
+    </div>
+}
+else
+{
+    <div class="article-list">
+        @foreach (var article in _articles)
+        {
+            <a class="article-card" href="@($"articles/{article.Id}")">
+                <h2 class="article-card-title">@article.Title</h2>
+                <div class="article-card-meta">
+                    by <strong>@article.Author</strong>
+                    · @article.CreatedAt.ToLocalTime().ToString("MMM d, yyyy")
+                    · @article.CommentCount comment@(article.CommentCount == 1 ? "" : "s")
+                    @if (article.UpdatedAt is not null)
+                    {
+                        <span class="badge">edited</span>
+                    }
+                </div>
+                @if (!string.IsNullOrWhiteSpace(article.Excerpt))
+                {
+                    <p class="article-card-excerpt">@article.Excerpt</p>
+                }
+            </a>
+        }
+    </div>
+}
+
+@code {
+    private List<ArticleSummaryDto> _articles = new();
+    private bool _loading = true;
+    private string? _error;
+
+    protected override async Task OnInitializedAsync()
+    {
+        try
+        {
+            _articles = await Api.GetArticlesAsync();
+        }
+        catch (Exception ex)
+        {
+            _error = $"Could not load articles: {ex.Message}";
+        }
+        finally
+        {
+            _loading = false;
+        }
+    }
+}

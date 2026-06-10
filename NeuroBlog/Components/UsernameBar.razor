@@ -1,0 +1,13 @@
+@inject UserState User
+
+@if (User.HasUser)
+{
+    <div class="user-chip">
+        <span class="user-name" title="Signed in as">@User.Username</span>
+        <button class="switch-btn" @onclick="SwitchUser">Switch</button>
+    </div>
+}
+
+@code {
+    private async Task SwitchUser() => await User.ClearAsync();
+}

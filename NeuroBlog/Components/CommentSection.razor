@@ -1,0 +1,96 @@
+@inject BlogApi Api
+
+<div class="comments">
+    <h3>Comments (@_comments.Count)</h3>
+
+    <div class="new-comment">
+        <textarea class="comment-input"
+                  @bind="_newComment"
+                  @bind:event="oninput"
+                  maxlength="@ContentLimits.MaxCommentLength"
+                  rows="3"
+                  placeholder="Add a comment…"></textarea>
+        <div class="comment-form-row">
+            <span class="muted">@_newComment.Length / @ContentLimits.MaxCommentLength</span>
+            <button class="btn btn-primary btn-sm" @onclick="AddComment" disabled="@_posting">Comment</button>
+        </div>
+        @if (_error is not null)
+        {
+            <div class="field-error">@_error</div>
+        }
+    </div>
+
+    @if (_loading)
+    {
+        <p class="muted">Loading comments…</p>
+    }
+    else if (_comments.Count == 0)
+    {
+        <p class="muted">No comments yet. Start the conversation!</p>
+    }
+    else
+    {
+        <div class="comment-tree">
+            @foreach (var root in _lookup[null])
+            {
+                <CommentNode Comment="root" Lookup="_lookup" ArticleId="ArticleId" OnChanged="ReloadAsync" />
+            }
+        </div>
+    }
+</div>
+
+@code {
+    [Parameter] public Guid ArticleId { get; set; }
+    [Parameter] public EventCallback<int> OnCountChanged { get; set; }
+
+    private List<CommentDto> _comments = new();
+    private ILookup<Guid?, CommentDto> _lookup = Enumerable.Empty<CommentDto>().ToLookup(c => (Guid?)null);
+    private string _newComment = "";
+    private bool _loading = true;
+    private bool _posting;
+    private string? _error;
+
+    protected override async Task OnInitializedAsync() => await ReloadAsync();
+
+    private async Task ReloadAsync()
+    {
+        _loading = true;
+        try
+        {
+            _comments = await Api.GetCommentsAsync(ArticleId);
+            _lookup = _comments.ToLookup(c => c.ParentCommentId);
+            await OnCountChanged.InvokeAsync(_comments.Count);
+        }
+        finally
+        {
+            _loading = false;
+        }
+    }
+
+    private async Task AddComment()
+    {
+        var content = _newComment.Trim();
+        _error = null;
+        if (content.Length == 0)
+        {
+            _error = "Comment cannot be empty.";
+            return;
+        }
+
+        _posting = true;
+        try
+        {
+            await Api.AddCommentAsync(ArticleId, new CreateCommentRequest { Content = content });
+            _newComment = "";
+            await ReloadAsync();
+        }
+        catch (Exception ex)
+        {
+            _error = ex.Message;
+        }
+        finally
+        {
+            _posting = false;
+        }
+    }
+}

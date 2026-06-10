@@ -1,0 +1,114 @@
+@page "/articles/{Id:guid}"
+@inject BlogApi Api
+@inject NavigationManager Nav
+@inject UserState User
+
+<PageTitle>@(_article?.Title ?? "Article") · NeuroBlog</PageTitle>
+
+@if (_loading)
+{
+    <p class="muted">Loading…</p>
+}
+else if (_article is null)
+{
+    <div class="alert">Article not found.</div>
+    <a class="btn btn-secondary" href="">Back to articles</a>
+}
+else
+{
+    <article>
+        <a class="back-link" href="">← All articles</a>
+        <h1 class="article-title">@_article.Title</h1>
+        <div class="article-meta">
+            by <strong>@_article.Author</strong>
+            · @_article.CreatedAt.ToLocalTime().ToString("MMMM d, yyyy 'at' h:mm tt")
+            @if (_article.UpdatedAt is not null)
+            {
+                <span class="badge">edited</span>
+            }
+        </div>
+
+        @if (User.Owns(_article.Author))
+        {
+            <div class="owner-actions">
+                <a class="btn btn-secondary" href="@($"articles/{Id}/edit")">Edit</a>
+                @if (!_confirmingDelete)
+                {
+                    <button class="btn btn-danger" @onclick="() => _confirmingDelete = true">Delete</button>
+                }
+                else
+                {
+                    <span class="confirm">Delete this article?
+                        <button class="btn btn-danger btn-sm" @onclick="DeleteArticle" disabled="@_deleting">Yes, delete</button>
+                        <button class="btn btn-secondary btn-sm" @onclick="() => _confirmingDelete = false" disabled="@_deleting">Cancel</button>
+                    </span>
+                }
+            </div>
+        }
+
+        @if (_actionError is not null)
+        {
+            <div class="alert">@_actionError</div>
+        }
+
+        <div class="article-body">@((MarkupString)_article.Html)</div>
+    </article>
+
+    <section class="comments-section">
+        <button class="btn btn-secondary" @onclick="ToggleComments">
+            @(_showComments ? "Hide comments" : $"Show comments ({_commentCount})")
+        </button>
+
+        @if (_showComments)
+        {
+            <CommentSection ArticleId="Id" OnCountChanged="OnCommentCountChanged" />
+        }
+    </section>
+}
+
+@code {
+    [Parameter] public Guid Id { get; set; }
+
+    private ArticleDto? _article;
+    private bool _loading = true;
+    private bool _showComments;
+    private bool _confirmingDelete;
+    private bool _deleting;
+    private int _commentCount;
+    private string? _actionError;
+
+    protected override async Task OnInitializedAsync()
+    {
+        try
+        {
+            _article = await Api.GetArticleAsync(Id);
+            if (_article is not null)
+                _commentCount = _article.CommentCount;
+        }
+        finally
+        {
+            _loading = false;
+        }
+    }
+
+    private void ToggleComments() => _showComments = !_showComments;
+
+    private void OnCommentCountChanged(int count) => _commentCount = count;
+
+    private async Task DeleteArticle()
+    {
+        _deleting = true;
+        _actionError = null;
+        try
+        {
+            await Api.DeleteArticleAsync(Id);
+            Nav.NavigateTo("");
+        }
+        catch (Exception ex)
+        {
+            _actionError = ex.Message;
+            _deleting = false;
+            _confirmingDelete = false;
+        }
+    }
+}

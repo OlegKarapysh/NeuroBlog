@@ -1,0 +1,39 @@
+@inherits LayoutComponentBase
+@implements IDisposable
+@inject UserState User
+
+<div class="app-shell">
+    <header class="app-header">
+        <a class="brand" href="">
+            <span class="brand-mark">🧠</span> NeuroBlog
+        </a>
+        <UsernameBar />
+    </header>
+
+    <main class="app-main">
+        @if (!User.IsInitialized)
+        {
+            <div class="centered muted">Loading…</div>
+        }
+        else if (!User.HasUser)
+        {
+            <UsernamePrompt />
+        }
+        else
+        {
+            @Body
+        }
+    </main>
+</div>
+
+@code {
+    protected override async Task OnInitializedAsync()
+    {
+        User.Changed += OnUserChanged;
+        await User.InitializeAsync();
+    }
+
+    private void OnUserChanged() => InvokeAsync(StateHasChanged);
+
+    public void Dispose() => User.Changed -= OnUserChanged;
+}

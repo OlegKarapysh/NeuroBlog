@@ -1,0 +1,211 @@
+@inject BlogApi Api
+@inject UserState User
+
+<div class="comment @(Comment.IsDeleted ? "comment-deleted" : null)">
+    <div class="comment-head">
+        <strong class="comment-author">@(Comment.IsDeleted ? "—" : Comment.Author)</strong>
+        <span class="comment-time">@Comment.CreatedAt.ToLocalTime().ToString("MMM d, yyyy h:mm tt")</span>
+        @if (!Comment.IsDeleted && Comment.UpdatedAt is not null)
+        {
+            <span class="comment-edited">(edited)</span>
+        }
+    </div>
+
+    @if (Comment.IsDeleted)
+    {
+        <div class="comment-body deleted-text">This comment was deleted</div>
+    }
+    else if (_editing)
+    {
+        <textarea class="comment-input"
+                  @bind="_editText"
+                  @bind:event="oninput"
+                  maxlength="@ContentLimits.MaxCommentLength"
+                  rows="3"></textarea>
+        <div class="comment-form-row">
+            <span class="muted">@_editText.Length / @ContentLimits.MaxCommentLength</span>
+            <span>
+                <button class="btn btn-primary btn-sm" @onclick="SaveEdit" disabled="@_busy">Save</button>
+                <button class="btn btn-secondary btn-sm" @onclick="CancelEdit" disabled="@_busy">Cancel</button>
+            </span>
+        </div>
+    }
+    else
+    {
+        <div class="comment-body">@Comment.Content</div>
+    }
+
+    @if (_error is not null)
+    {
+        <div class="field-error">@_error</div>
+    }
+
+    @if (!_editing)
+    {
+        <div class="comment-actions">
+            <button class="link-btn" @onclick="ToggleReply">Reply</button>
+            @if (!Comment.IsDeleted && User.Owns(Comment.Author))
+            {
+                <button class="link-btn" @onclick="StartEdit">Edit</button>
+                @if (!_confirmingDelete)
+                {
+                    <button class="link-btn danger" @onclick="() => _confirmingDelete = true">Delete</button>
+                }
+                else
+                {
+                    <span class="confirm">
+                        Delete?
+                        <button class="link-btn danger" @onclick="DeleteComment" disabled="@_busy">Yes</button>
+                        <button class="link-btn" @onclick="() => _confirmingDelete = false" disabled="@_busy">No</button>
+                    </span>
+                }
+            }
+        </div>
+    }
+
+    @if (_replying)
+    {
+        <div class="reply-box">
+            <textarea class="comment-input"
+                      @bind="_replyText"
+                      @bind:event="oninput"
+                      maxlength="@ContentLimits.MaxCommentLength"
+                      rows="2"
+                      placeholder="Write a reply…"></textarea>
+            <div class="comment-form-row">
+                <span class="muted">@_replyText.Length / @ContentLimits.MaxCommentLength</span>
+                <span>
+                    <button class="btn btn-primary btn-sm" @onclick="SubmitReply" disabled="@_busy">Reply</button>
+                    <button class="btn btn-secondary btn-sm" @onclick="ToggleReply" disabled="@_busy">Cancel</button>
+                </span>
+            </div>
+        </div>
+    }
+
+    @{
+        var children = Lookup[Comment.Id].ToList();
+    }
+    @if (children.Count > 0)
+    {
+        <div class="replies">
+            @foreach (var child in children)
+            {
+                <CommentNode Comment="child" Lookup="Lookup" ArticleId="ArticleId" OnChanged="OnChanged" />
+            }
+        </div>
+    }
+</div>
+
+@code {
+    [Parameter] public CommentDto Comment { get; set; } = default!;
+    [Parameter] public ILookup<Guid?, CommentDto> Lookup { get; set; } = default!;
+    [Parameter] public Guid ArticleId { get; set; }
+    [Parameter] public EventCallback OnChanged { get; set; }
+
+    private bool _replying;
+    private bool _editing;
+    private bool _confirmingDelete;
+    private bool _busy;
+    private string _replyText = "";
+    private string _editText = "";
+    private string? _error;
+
+    private void ToggleReply()
+    {
+        _replying = !_replying;
+        _replyText = "";
+        _error = null;
+    }
+
+    private void StartEdit()
+    {
+        _editing = true;
+        _editText = Comment.Content;
+        _error = null;
+    }
+
+    private void CancelEdit()
+    {
+        _editing = false;
+        _error = null;
+    }
+
+    private async Task SubmitReply()
+    {
+        var content = _replyText.Trim();
+        _error = null;
+        if (content.Length == 0)
+        {
+            _error = "Reply cannot be empty.";
+            return;
+        }
+
+        _busy = true;
+        try
+        {
+            await Api.AddCommentAsync(ArticleId, new CreateCommentRequest
+            {
+                Content = content,
+                ParentCommentId = Comment.Id,
+            });
+            _replying = false;
+            _replyText = "";
+            await OnChanged.InvokeAsync();
+        }
+        catch (Exception ex)
+        {
+            _error = ex.Message;
+        }
+        finally
+        {
+            _busy = false;
+        }
+    }
+
+    private async Task SaveEdit()
+    {
+        var content = _editText.Trim();
+        _error = null;
+        if (content.Length == 0)
+        {
+            _error = "Comment cannot be empty.";
+            return;
+        }
+
+        _busy = true;
+        try
+        {
+            await Api.UpdateCommentAsync(Comment.Id, new UpdateCommentRequest { Content = content });
+            _editing = false;
+            await OnChanged.InvokeAsync();
+        }
+        catch (Exception ex)
+        {
+            _error = ex.Message;
+        }
+        finally
+        {
+            _busy = false;
+        }
+    }
+
+    private async Task DeleteComment()
+    {
+        _busy = true;
+        _error = null;
+        try
+        {
+            await Api.DeleteCommentAsync(Comment.Id);
+            _confirmingDelete = false;
+            await OnChanged.InvokeAsync();
+        }
+        catch (Exception ex)
+        {
+            _error = ex.Message;
+        }
+        finally
+        {
+            _busy = false;
+        }
+    }
+}

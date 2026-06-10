@@ -1,0 +1,5 @@
+<Solution>
+  <Project Path="NeuroBlog.Server/NeuroBlog.Server.csproj" />
+  <Project Path="NeuroBlog.Shared/NeuroBlog.Shared.csproj" />
+  <Project Path="NeuroBlog/NeuroBlog.csproj" />
+</Solution>

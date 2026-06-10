@@ -1,0 +1,27 @@
+.user-chip {
+    display: flex;
+    align-items: center;
+    gap: 0.6rem;
+}
+
+.user-name {
+    font-weight: 600;
+    max-width: 12rem;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.switch-btn {
+    background: rgba(255, 255, 255, 0.12);
+    color: #fff;
+    border: 1px solid rgba(255, 255, 255, 0.3);
+    border-radius: 999px;
+    padding: 0.2rem 0.75rem;
+    font-size: 0.8rem;
+    cursor: pointer;
+}
+
+.switch-btn:hover {
+    background: rgba(255, 255, 255, 0.22);
+}

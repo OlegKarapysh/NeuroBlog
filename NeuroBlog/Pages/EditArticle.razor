@@ -1,0 +1,82 @@
+@page "/articles/{Id:guid}/edit"
+@inject BlogApi Api
+@inject NavigationManager Nav
+@inject UserState User
+
+<PageTitle>Edit article · NeuroBlog</PageTitle>
+
+@if (_loading)
+{
+    <p class="muted">Loading…</p>
+}
+else if (_article is null)
+{
+    <div class="alert">Article not found.</div>
+    <a class="btn btn-secondary" href="">Back to articles</a>
+}
+else if (!User.Owns(_article.Author))
+{
+    <div class="alert">You can only edit your own articles.</div>
+    <a class="btn btn-secondary" href="@($"articles/{Id}")">Back to article</a>
+}
+else
+{
+    <div class="page-head">
+        <h1>Edit article</h1>
+    </div>
+
+    <ArticleEditor InitialTitle="@_article.Title"
+                   InitialHtml="@_article.Html"
+                   SubmitLabel="Save changes"
+                   Busy="_busy"
+                   Error="_error"
+                   OnSubmit="Save"
+                   OnCancel="Cancel" />
+}
+
+@code {
+    [Parameter] public Guid Id { get; set; }
+
+    private ArticleDto? _article;
+    private bool _loading = true;
+    private bool _busy;
+    private string? _error;
+
+    protected override async Task OnInitializedAsync()
+    {
+        try
+        {
+            _article = await Api.GetArticleAsync(Id);
+        }
+        catch (Exception ex)
+        {
+            _error = ex.Message;
+        }
+        finally
+        {
+            _loading = false;
+        }
+    }
+
+    private async Task Save(ArticleDraft draft)
+    {
+        _busy = true;
+        _error = null;
+        try
+        {
+            await Api.UpdateArticleAsync(Id, new UpdateArticleRequest
+            {
+                Title = draft.Title,
+                Html = draft.Html,
+            });
+            Nav.NavigateTo($"articles/{Id}");
+        }
+        catch (Exception ex)
+        {
+            _error = ex.Message;
+            _busy = false;
+        }
+    }
+
+    private void Cancel() => Nav.NavigateTo($"articles/{Id}");
+}

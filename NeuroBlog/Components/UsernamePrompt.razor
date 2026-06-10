@@ -1,0 +1,51 @@
+@inject UserState User
+
+<div class="prompt-card">
+    <h1>Welcome to NeuroBlog</h1>
+    <p class="muted">Pick any username to start reading and posting. No password required.</p>
+
+    <input class="text-input"
+           @bind="_name"
+           @bind:event="oninput"
+           @onkeydown="OnKeyDown"
+           placeholder="Your username"
+           maxlength="@ContentLimits.MaxUsernameLength"
+           autofocus />
+
+    @if (_error is not null)
+    {
+        <div class="field-error">@_error</div>
+    }
+
+    <button class="btn btn-primary" @onclick="Submit" disabled="@_busy">Start</button>
+</div>
+
+@code {
+    private string _name = "";
+    private string? _error;
+    private bool _busy;
+
+    private async Task OnKeyDown(KeyboardEventArgs e)
+    {
+        if (e.Key == "Enter")
+            await Submit();
+    }
+
+    private async Task Submit()
+    {
+        var name = _name.Trim();
+        if (name.Length == 0)
+        {
+            _error = "Please enter a username.";
+            return;
+        }
+        if (name.Length > ContentLimits.MaxUsernameLength)
+        {
+            _error = $"Username must be at most {ContentLimits.MaxUsernameLength} characters.";
+            return;
+        }
+
+        _busy = true;
+        await User.SetUsernameAsync(name);
+    }
+}

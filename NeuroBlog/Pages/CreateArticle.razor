@@ -1,0 +1,42 @@
+@page "/articles/new"
+@inject BlogApi Api
+@inject NavigationManager Nav
+
+<PageTitle>New article · NeuroBlog</PageTitle>
+
+<div class="page-head">
+    <h1>Write an article</h1>
+</div>
+
+<ArticleEditor SubmitLabel="Publish"
+               Busy="_busy"
+               Error="_error"
+               OnSubmit="Publish"
+               OnCancel="Cancel" />
+
+@code {
+    private bool _busy;
+    private string? _error;
+
+    private async Task Publish(ArticleDraft draft)
+    {
+        _busy = true;
+        _error = null;
+        try
+        {
+            var created = await Api.CreateArticleAsync(new CreateArticleRequest
+            {
+                Title = draft.Title,
+                Html = draft.Html,
+            });
+            Nav.NavigateTo($"articles/{created.Id}");
+        }
+        catch (Exception ex)
+        {
+            _error = ex.Message;
+            _busy = false;
+        }
+    }
+
+    private void Cancel() => Nav.NavigateTo("");
+}

@@ -1,0 +1,81 @@
+<div class="editor">
+    <label class="label">Title <span class="muted">(optional)</span></label>
+    <input class="text-input"
+           @bind="_title"
+           @bind:event="oninput"
+           maxlength="@ContentLimits.MaxArticleTitleLength"
+           placeholder="Untitled" />
+
+    <label class="label">HTML content</label>
+    <textarea class="html-input"
+              @bind="_html"
+              @bind:event="oninput"
+              rows="14"
+              placeholder="Paste your HTML here…"></textarea>
+
+    <div class="editor-meta">
+        <span class="muted">@_html.Length characters</span>
+        <button class="btn-link" type="button" @onclick="TogglePreview">
+            @(_showPreview ? "Hide preview" : "Show preview")
+        </button>
+    </div>
+
+    @if (_showPreview)
+    {
+        <div class="preview">
+            <div class="preview-label muted">Preview — scripts and unsafe markup are removed when you save</div>
+            <div class="article-body">@((MarkupString)_html)</div>
+        </div>
+    }
+
+    @if (DisplayError is not null)
+    {
+        <div class="field-error">@DisplayError</div>
+    }
+
+    <div class="editor-actions">
+        <button class="btn btn-primary" @onclick="Submit" disabled="@Busy">
+            @(Busy ? "Saving…" : SubmitLabel)
+        </button>
+        <button class="btn btn-secondary" type="button" @onclick="Cancel" disabled="@Busy">Cancel</button>
+    </div>
+</div>
+
+@code {
+    [Parameter] public string? InitialTitle { get; set; }
+    [Parameter] public string InitialHtml { get; set; } = "";
+    [Parameter] public string SubmitLabel { get; set; } = "Publish";
+    [Parameter] public bool Busy { get; set; }
+    [Parameter] public string? Error { get; set; }
+    [Parameter] public EventCallback<ArticleDraft> OnSubmit { get; set; }
+    [Parameter] public EventCallback OnCancel { get; set; }
+
+    private string? _title;
+    private string _html = "";
+    private bool _showPreview;
+    private string? _localError;
+
+    private string? DisplayError => _localError ?? Error;
+
+    protected override void OnInitialized()
+    {
+        _title = InitialTitle;
+        _html = InitialHtml ?? "";
+    }
+
+    private void TogglePreview() => _showPreview = !_showPreview;
+
+    private async Task Submit()
+    {
+        _localError = null;
+        if (string.IsNullOrWhiteSpace(_html))
+        {
+            _localError = "Article content cannot be empty.";
+            return;
+        }
+
+        await OnSubmit.InvokeAsync(new ArticleDraft(_title, _html));
+    }
+
+    private Task Cancel() => OnCancel.InvokeAsync();
+}
