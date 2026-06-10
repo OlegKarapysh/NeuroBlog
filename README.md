@@ -30,9 +30,30 @@ NeuroBlog.Shared/   DTOs and validation limits shared by both
 - Edit / delete your own articles.
 - Comment on articles and reply to comments to **any depth**.
 - Open a collapsible comment section under each article.
-- Edit your own comments; delete your own comments (shown as
-  *“This comment was deleted”*, with replies preserved).
+- Comments and replies load **lazily, 10 at a time** (see [Comments at scale](#comments-at-scale)):
+  "Show comments" / "Show more comments" for top-level comments, and per-comment
+  "Show replies" / "Show more replies" for direct replies.
+- Edit your own comments.
+- Delete your own comments: a comment that **has replies** is kept and shown as
+  *“This comment was deleted”* so the thread stays intact; a comment with **no
+  replies** is removed entirely.
 - Validation: comments 1–1000 chars, article body ≥ 1 char.
+
+### Comments at scale
+
+Comments are never loaded all at once — the design assumes an article may have
+millions of comments, many of them deeply nested:
+
+- The list endpoints return **one page of 10**, newest first, and only ever load
+  more when the user asks ("Show more comments" / "Show more replies").
+- Replies are fetched per comment, **one level (direct replies) at a time**, so a
+  deep thread only costs queries for the branches the user actually expands.
+- "More pages exist?" is answered by fetching one extra row (`Take(pageSize + 1)`)
+  instead of a `COUNT`, which avoids counting across millions of rows.
+- Composite indexes back the exact query shapes:
+  `(ArticleId, ParentCommentId, CreatedAt, Id)` for top-level comments and
+  `(ParentCommentId, CreatedAt, Id)` for replies, so a page reads straight from
+  the index.
 
 ### Security note
 
@@ -45,6 +66,9 @@ Comments are plain text and HTML-encoded on display.
 Because there is no authentication, "ownership" is simply the username sent in an
 `X-Username` header. This is intentionally trivial to spoof and is fine for a
 no-auth demo; it is **not** a real authorization system.
+
+CORS is wide open (any origin, header and method), so the API can be called from
+anywhere — convenient for a demo, not something you'd ship as-is.
 
 ## Run with Docker (recommended)
 
@@ -100,12 +124,12 @@ automatically).
 | GET    | `/api/comments/{id}/replies?page=N`     | One page (10) of a comment's direct replies |
 | POST   | `/api/articles/{id}/comments`           | Add a comment / reply                |
 | PUT    | `/api/comments/{id}`                    | Edit your comment                    |
-| DELETE | `/api/comments/{id}`                    | Soft-delete your comment             |
+| DELETE | `/api/comments/{id}`                    | Delete your comment (kept as "deleted" if it has replies, else removed) |
 
 ## Database migrations
 
-The initial migration lives in `NeuroBlog.Server/Migrations`. To add another
-after changing the model:
+Migrations live in `NeuroBlog.Server/Migrations`. To add another after changing
+the model:
 
 ```bash
 dotnet ef migrations add <Name> --project NeuroBlog.Server
