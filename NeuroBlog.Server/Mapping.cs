@@ -23,5 +23,6 @@ public static class Mapping
         IsDeleted = c.IsDeleted,
         CreatedAt = c.CreatedAt,
         UpdatedAt = c.UpdatedAt,
+        ReplyDepth = c.ReplyDepth,
     };
 }

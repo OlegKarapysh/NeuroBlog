@@ -121,6 +121,8 @@ automatically).
 | PUT    | `/api/articles/{id}`                    | Edit your article                    |
 | DELETE | `/api/articles/{id}`                    | Delete your article (cascades comments) |
 | GET    | `/api/articles/{id}/comments?page=N`    | One page (10) of top-level comments, newest first |
+| GET    | `/api/articles/{id}/comments/first-page`| First 100 comments breadth-first (by depth, replies grouped under their parent) |
+| GET    | `/api/articles/{id}/comments/first-page-dfs`| First 100 comments depth-first (each comment followed by its descendants); raw recursive CTE |
 | GET    | `/api/comments/{id}/replies?page=N`     | One page (10) of a comment's direct replies |
 | POST   | `/api/articles/{id}/comments`           | Add a comment / reply                |
 | PUT    | `/api/comments/{id}`                    | Edit your comment                    |

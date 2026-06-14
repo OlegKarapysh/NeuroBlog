@@ -8,6 +8,7 @@ public class Comment
     public Guid? ParentCommentId { get; private set; }
     public Comment? ParentComment { get; private set; }
     public List<Comment> Replies { get; private set; } = [];
+    public long ReplyDepth { get; private set; }
     public string Author { get; private set; } = string.Empty;
     public string Content { get; private set; } = string.Empty;
     public bool IsDeleted { get; private set; }
@@ -16,11 +17,12 @@ public class Comment
     
     private Comment() { } // Parameterless constructor for EF Core materialization only.
 
-    public static Comment Create(Guid articleId, string author, string content, Guid? parentCommentId) => new()
+    public static Comment Create(Guid articleId, string author, string content, Guid? parentCommentId, long replyDepth) => new()
     {
         Id = Guid.NewGuid(),
         ArticleId = articleId,
         ParentCommentId = parentCommentId,
+        ReplyDepth = replyDepth,
         Author = author,
         Content = content.Trim(),
         CreatedAt = DateTimeOffset.UtcNow,

@@ -21,4 +21,7 @@ public record CommentDto
 
     /// <summary>Number of direct (one level) replies, used to show the "Show replies" button.</summary>
     public int ReplyCount { get; init; }
+
+    /// <summary>Nesting level: 0 for a top-level comment, parent depth + 1 for a reply.</summary>
+    public long ReplyDepth { get; init; }
 }
