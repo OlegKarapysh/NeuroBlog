@@ -1,7 +1,7 @@
 # NeuroBlog
 
 A small article-posting app: write articles in HTML, browse what others post, and
-hold threaded (unlimited-depth) conversations in the comments. There is **no
+hold threaded (deeply nested) conversations in the comments. There is **no
 authentication** — pick any username and start using it.
 
 ## Stack
@@ -28,7 +28,7 @@ NeuroBlog.Shared/   DTOs and validation limits shared by both
 - Create an article by pasting HTML; optional title.
 - Browse articles by everyone, read full articles.
 - Edit / delete your own articles.
-- Comment on articles and reply to comments to **any depth**.
+- Comment on articles and reply to comments to **deep nesting** (up to 250 levels).
 - Open a collapsible comment section under each article.
 - Comments and replies load **lazily, 10 at a time** (see [Comments at scale](#comments-at-scale)):
   "Show comments" / "Show more comments" for top-level comments, and per-comment
@@ -37,7 +37,8 @@ NeuroBlog.Shared/   DTOs and validation limits shared by both
 - Delete your own comments: a comment that **has replies** is kept and shown as
   *“This comment was deleted”* so the thread stays intact; a comment with **no
   replies** is removed entirely.
-- Validation: comments 1–1000 chars, article body ≥ 1 char.
+- Validation: comments 1–1000 chars, article body ≥ 1 char, replies nested at
+  most 250 levels deep (see [Comments at scale](#comments-at-scale)).
 
 ### Comments at scale
 
@@ -54,6 +55,19 @@ millions of comments, many of them deeply nested:
   `(ArticleId, ParentCommentId, CreatedAt, Id)` for top-level comments and
   `(ParentCommentId, CreatedAt, Id)` for replies, so a page reads straight from
   the index.
+- "First 100 comments, depth-first" comes in two flavours. The recursive-CTE
+  endpoint (`first-page-dfs`) expands the whole article tree before limiting. The
+  `first-page-path` endpoint instead reads a denormalized **materialized path**
+  column: comment Ids are sequence-backed `bigint`s (so an Id both orders siblings
+  oldest-first and uniquely identifies them), and each comment's `Path` is a
+  `bytea` holding its parent's path plus its own Id as 8 big-endian bytes. `bytea`
+  compares byte-by-byte, so the path order *is* depth-first pre-order and the query
+  is a single `WHERE "ArticleId" = @a ORDER BY "Path" LIMIT 100` served straight
+  from the `(ArticleId, Path)` index — no recursion, no over-read.
+- The path costs only 8 bytes per nesting level. Reply depth is capped at **250**
+  so the deepest path stays well under PostgreSQL's ~2704-byte B-tree key limit; a
+  reply past that depth is rejected with `400`, which is why "unlimited" nesting is
+  in practice bounded.
 
 ### Security note
 
@@ -123,6 +137,7 @@ automatically).
 | GET    | `/api/articles/{id}/comments?page=N`    | One page (10) of top-level comments, newest first |
 | GET    | `/api/articles/{id}/comments/first-page`| First 100 comments breadth-first (by depth, replies grouped under their parent) |
 | GET    | `/api/articles/{id}/comments/first-page-dfs`| First 100 comments depth-first (each comment followed by its descendants); raw recursive CTE |
+| GET    | `/api/articles/{id}/comments/first-page-path`| First 100 comments depth-first via the materialized `Path` column — a single indexed `ORDER BY "Path" LIMIT 100`, no recursion |
 | GET    | `/api/comments/{id}/replies?page=N`     | One page (10) of a comment's direct replies |
 | POST   | `/api/articles/{id}/comments`           | Add a comment / reply                |
 | PUT    | `/api/comments/{id}`                    | Edit your comment                    |

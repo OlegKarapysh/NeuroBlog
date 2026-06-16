@@ -2,6 +2,7 @@
 using System;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using NeuroBlog.Server.Data;
 using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
@@ -11,9 +12,11 @@ using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 namespace NeuroBlog.Server.Migrations
 {
     [DbContext(typeof(AppDbContext))]
-    partial class AppDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260616151456_AddCommentPath")]
+    partial class AddCommentPath
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -21,8 +24,6 @@ namespace NeuroBlog.Server.Migrations
                 .HasAnnotation("Relational:MaxIdentifierLength", 63);
 
             NpgsqlModelBuilderExtensions.UseIdentityByDefaultColumns(modelBuilder);
-
-            modelBuilder.HasSequence("CommentIds");
 
             modelBuilder.Entity("NeuroBlog.Server.Models.Article", b =>
                 {
@@ -59,8 +60,9 @@ namespace NeuroBlog.Server.Migrations
 
             modelBuilder.Entity("NeuroBlog.Server.Models.Comment", b =>
                 {
-                    b.Property<long>("Id")
-                        .HasColumnType("bigint");
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
 
                     b.Property<Guid>("ArticleId")
                         .HasColumnType("uuid");
@@ -81,12 +83,13 @@ namespace NeuroBlog.Server.Migrations
                     b.Property<bool>("IsDeleted")
                         .HasColumnType("boolean");
 
-                    b.Property<long?>("ParentCommentId")
-                        .HasColumnType("bigint");
+                    b.Property<Guid?>("ParentCommentId")
+                        .HasColumnType("uuid");
 
-                    b.Property<byte[]>("Path")
+                    b.Property<string>("Path")
                         .IsRequired()
-                        .HasColumnType("bytea");
+                        .HasColumnType("text")
+                        .UseCollation("C");
 
                     b.Property<long>("ReplyDepth")
                         .HasColumnType("bigint");

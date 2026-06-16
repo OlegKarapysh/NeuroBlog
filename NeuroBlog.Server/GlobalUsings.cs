@@ -1,3 +1,4 @@
+global using System.Buffers.Binary;
 global using Ganss.Xss;
 global using Microsoft.AspNetCore.Mvc;
 global using Microsoft.EntityFrameworkCore;

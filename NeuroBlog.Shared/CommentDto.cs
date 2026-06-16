@@ -6,9 +6,9 @@ namespace NeuroBlog.Shared;
 /// </summary>
 public record CommentDto
 {
-    public Guid Id { get; init; }
+    public long Id { get; init; }
     public Guid ArticleId { get; init; }
-    public Guid? ParentCommentId { get; init; }
+    public long? ParentCommentId { get; init; }
 
     public string Author { get; init; } = "";
 

@@ -45,7 +45,7 @@ public class BlogApi
         await _http.GetFromJsonAsync<PagedResult<CommentDto>>($"api/articles/{articleId}/comments?page={page}") ?? new();
 
     /// <summary>One page of the direct replies of a comment.</summary>
-    public async Task<PagedResult<CommentDto>> GetRepliesAsync(Guid commentId, int page) =>
+    public async Task<PagedResult<CommentDto>> GetRepliesAsync(long commentId, int page) =>
         await _http.GetFromJsonAsync<PagedResult<CommentDto>>($"api/comments/{commentId}/replies?page={page}") ?? new();
 
     public async Task<CommentDto> AddCommentAsync(Guid articleId, CreateCommentRequest request)
@@ -54,13 +54,13 @@ public class BlogApi
         return await ReadAsync<CommentDto>(response);
     }
 
-    public async Task<CommentDto> UpdateCommentAsync(Guid id, UpdateCommentRequest request)
+    public async Task<CommentDto> UpdateCommentAsync(long id, UpdateCommentRequest request)
     {
         var response = await _http.PutAsJsonAsync($"api/comments/{id}", request);
         return await ReadAsync<CommentDto>(response);
     }
 
-    public async Task<CommentDto> DeleteCommentAsync(Guid id)
+    public async Task<CommentDto> DeleteCommentAsync(long id)
     {
         var response = await _http.DeleteAsync($"api/comments/{id}");
         return await ReadAsync<CommentDto>(response);

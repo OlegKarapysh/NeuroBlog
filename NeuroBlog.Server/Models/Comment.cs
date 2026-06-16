@@ -2,13 +2,21 @@ namespace NeuroBlog.Server.Models;
 
 public class Comment
 {
-    public Guid Id { get; private set; }
+    public long Id { get; private set; }
     public Guid ArticleId { get; private set; }
     public Article Article { get; private set; } = null!;
-    public Guid? ParentCommentId { get; private set; }
+    public long? ParentCommentId { get; private set; }
     public Comment? ParentComment { get; private set; }
     public List<Comment> Replies { get; private set; } = [];
     public long ReplyDepth { get; private set; }
+
+    // Materialized path: the parent's path plus this comment's own 8-byte
+    // big-endian Id. Ordering by Path (raw byte order — bytea has no collation)
+    // yields depth-first pre-order, so the first 100 comments are a single indexed
+    // scan with no recursion. The Id is a monotonic per-article counter, so it both
+    // orders siblings oldest-first and uniquely identifies them; appending it keeps
+    // a parent's path a prefix of its descendants'.
+    public byte[] Path { get; private set; } = [];
     public string Author { get; private set; } = string.Empty;
     public string Content { get; private set; } = string.Empty;
     public bool IsDeleted { get; private set; }
@@ -17,16 +25,31 @@ public class Comment
     
     private Comment() { } // Parameterless constructor for EF Core materialization only.
 
-    public static Comment Create(Guid articleId, string author, string content, Guid? parentCommentId, long replyDepth) => new()
+    public static Comment Create(
+        long id, Guid articleId, string author, string content, long? parentCommentId, long replyDepth, byte[]? parentPath = null) => new()
     {
-        Id = Guid.NewGuid(),
+        Id = id,
         ArticleId = articleId,
         ParentCommentId = parentCommentId,
         ReplyDepth = replyDepth,
         Author = author,
         Content = content.Trim(),
         CreatedAt = DateTimeOffset.UtcNow,
+        Path = BuildPath(parentPath, id),
     };
+
+    // The parent's path (its ancestors + itself) followed by this comment's own
+    // Id as 8 big-endian bytes. Big-endian so raw byte comparison of the bytea
+    // matches numeric Id order; Ids are positive so the sign bit never flips it.
+    private static byte[] BuildPath(byte[]? parentPath, long id)
+    {
+        var prefixLength = parentPath?.Length ?? 0;
+        var path = new byte[prefixLength + sizeof(long)];
+        if (prefixLength > 0)
+            Buffer.BlockCopy(parentPath!, 0, path, 0, prefixLength);
+        BinaryPrimitives.WriteInt64BigEndian(path.AsSpan(prefixLength), id);
+        return path;
+    }
 
     public void Edit(string content)
     {
